@@ -114,7 +114,7 @@
                 </div>
                 <div id="done" class="bg-white rounded-xl shadow-lg p-4">
                     <div class="flex justify-between items-center mb-4 pb-2 border-b-2 border-green-500">
-                        <h3 class="text-lg font-bold text-gray-700">Done</h3>
+                        <h3 class="text-lg font-bold text-gray-700">Completed</h3>
                         <button id="clear-done-btn" class="text-xs text-gray-500 hover:text-red-500 transition-colors">Clear All</button>
                     </div>
                     <div class="kanban-column space-y-3" data-column="done"></div>
@@ -128,7 +128,7 @@
         <div class="text-center p-8 bg-white rounded-xl shadow-2xl">
             <div class="flex justify-center items-center mb-4">
                 <svg class="w-12 h-12 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                <h1 class="text-3xl font-bold">Naimur's TTM</h1>
+                <h1 class="text-3xl font-bold">Naimur's TM</h1>
             </div>
             <p class="text-gray-600 mb-6">Sign in to manage your tasks from anywhere.</p>
             <button id="sign-in-btn" class="bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition-colors shadow-lg flex items-center mx-auto">
@@ -210,7 +210,6 @@
         const modalGoalTime = document.getElementById('modal-goal-time');
 
         // --- Firebase Initialization ---
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyDpxTe-IykLwgoLBFNYOXLKOJVY8A9AqPQ",
             authDomain: "task-manager-e3de8.firebaseapp.com",
@@ -256,33 +255,33 @@
         const loadTasks = (userId) => {
             const tasksCollection = collection(db, `tasks/${userId}/userTasks`);
             unsubscribeTasks = onSnapshot(tasksCollection, (snapshot) => {
-                const currentTasks = new Set([...columns].flatMap(c => [...c.querySelectorAll('.task')]).map(t => t.dataset.id));
-                const snapshotTasks = new Set(snapshot.docs.map(d => d.id));
-                
-                // Remove tasks that are no longer in the database
-                currentTasks.forEach(id => {
-                    if (!snapshotTasks.has(id)) {
-                        document.querySelector(`[data-id="${id}"]`)?.remove();
+                const tasksOnBoard = new Map([...document.querySelectorAll('.task')].map(t => [t.dataset.id, t]));
+                const tasksInSnapshot = new Set();
+
+                snapshot.docs.forEach(doc => {
+                    const taskData = { id: doc.id, ...doc.data() };
+                    tasksInSnapshot.add(doc.id);
+                    const existingEl = tasksOnBoard.get(doc.id);
+
+                    if (existingEl && existingEl.dataset.status === taskData.status) {
+                        // Task exists and is in the correct column, just update its content
+                        updateTaskElementContent(existingEl, taskData);
+                    } else {
+                        // Task is new, or has moved column
+                        if (existingEl) existingEl.remove(); // Remove from old column if it exists
+                        const newElement = createTaskElement(taskData);
+                        const column = document.querySelector(`[data-column="${taskData.status}"]`);
+                        if (column) column.appendChild(newElement);
                     }
                 });
 
-                // Add or update tasks
-                snapshot.docs.forEach(doc => {
-                    const taskData = { id: doc.id, ...doc.data() };
-                    let taskElement = document.querySelector(`[data-id="${doc.id}"]`);
-                    if (taskElement) { // Update existing element
-                        const newElement = createTaskElement(taskData);
-                        taskElement.replaceWith(newElement);
-                        taskElement = newElement;
-                    } else { // Create new element
-                        taskElement = createTaskElement(taskData);
-                    }
-                    
-                    const column = document.querySelector(`[data-column="${taskData.status}"]`);
-                    if (column && taskElement.parentElement !== column) {
-                        column.appendChild(taskElement);
+                // Remove tasks from the board that are no longer in the snapshot
+                tasksOnBoard.forEach((el, id) => {
+                    if (!tasksInSnapshot.has(id)) {
+                        el.remove();
                     }
                 });
+                
                 updateAllRemainingTimes();
             });
         };
@@ -325,18 +324,67 @@
             const querySnapshot = await getDocs(q);
             querySnapshot.forEach(document => deleteDoc(doc(db, `tasks/${userId}/userTasks`, document.id)));
         };
-
+        
         // --- UI & Task Element Creation ---
-        const createTaskElement = (task) => {
-            const taskEl = document.createElement('div');
-            taskEl.className = `task p-4 bg-gray-50 rounded-lg shadow-sm cursor-grab border-l-8 hover:bg-gray-100 transition-colors priority-${task.priority}`;
-            taskEl.setAttribute('draggable', 'true');
-            taskEl.dataset.id = task.id;
-
+        const updateTaskElementContent = (taskEl, task) => {
+             // Update dataset
             Object.keys(task).forEach(key => {
                 const value = task[key];
                 taskEl.dataset[key] = (value && typeof value.toDate === 'function') ? value.toDate().toISOString() : value;
             });
+
+            // Update visible content
+            taskEl.querySelector('.font-semibold').textContent = task.text;
+            const descEl = taskEl.querySelector('.text-sm');
+            if (task.description) {
+                if (descEl) {
+                    descEl.textContent = task.description;
+                } else {
+                    const newDescEl = document.createElement('p');
+                    newDescEl.className = 'text-sm text-gray-600 mt-2';
+                    newDescEl.textContent = task.description;
+                    taskEl.insertBefore(newDescEl, taskEl.querySelector('.text-xs'));
+                }
+            } else if (descEl) {
+                descEl.remove();
+            }
+            taskEl.className = `task p-4 bg-gray-50 rounded-lg shadow-sm cursor-grab border-l-8 hover:bg-gray-100 transition-colors priority-${task.priority}`;
+            updateTaskFooter(taskEl, task);
+        };
+
+        const updateTaskFooter = (taskEl, task) => {
+            const footerEl = taskEl.querySelector('.text-xs');
+            if (task.status === 'done') {
+                footerEl.innerHTML = `
+                    <span class="font-semibold text-green-600 flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Completed
+                    </span>`;
+            } else {
+                 footerEl.innerHTML = `
+                    <span class="created-time"></span>
+                    <span class="remaining-time font-medium"></span>`;
+            }
+        };
+
+        const createTaskElement = (task) => {
+            const taskEl = document.createElement('div');
+            taskEl.className = `task p-4 bg-gray-50 rounded-lg shadow-sm border-l-8 hover:bg-gray-100 transition-colors priority-${task.priority}`;
+            
+            Object.keys(task).forEach(key => {
+                const value = task[key];
+                taskEl.dataset[key] = (value && typeof value.toDate === 'function') ? value.toDate().toISOString() : value;
+            });
+            taskEl.dataset.id = task.id;
+
+            if (task.status !== 'done') {
+                taskEl.setAttribute('draggable', 'true');
+                taskEl.classList.add('cursor-grab');
+                addDragAndTouchListeners(taskEl);
+            } else {
+                taskEl.setAttribute('draggable', 'false');
+                taskEl.classList.add('cursor-default');
+            }
 
             taskEl.innerHTML = `
                 <div class="flex justify-between items-start">
@@ -349,13 +397,10 @@
                     </div>
                 </div>
                 ${task.description ? `<p class="text-sm text-gray-600 mt-2">${task.description}</p>` : ''}
-                <div class="text-xs text-gray-500 mt-3 pt-2 border-t flex justify-between">
-                    <span class="created-time"></span>
-                    <span class="remaining-time font-medium"></span>
-                </div>
+                <div class="text-xs text-gray-500 mt-3 pt-2 border-t flex justify-between items-center"></div>
             `;
             
-            addDragAndTouchListeners(taskEl);
+            updateTaskFooter(taskEl, task);
             taskEl.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
             taskEl.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); openEditModal(task); });
             return taskEl;
@@ -369,7 +414,7 @@
             const hours = Math.floor((diff / 3600000) % 24);
             const minutes = Math.floor((diff / 60000) % 60);
 
-            if (diff < 0) return { text: 'Overdue', className: 'time-overdue' };
+            if (diff < 0) return { text: 'Expired', className: 'time-overdue' };
             if (days > 1) return { text: `${days}d left`, className: 'time-due' };
             if (days === 1) return { text: `1d ${hours}h left`, className: 'time-due' };
             if (hours > 0) return { text: `${hours}h ${minutes}m left`, className: 'time-warning' };
@@ -378,15 +423,18 @@
 
         const updateAllRemainingTimes = () => {
             document.querySelectorAll('.task').forEach(taskEl => {
+                if (taskEl.dataset.status === 'done') return;
                 const createdAt = taskEl.dataset.createdAt;
                 const goalTime = taskEl.dataset.goalTime;
                 
-                if (createdAt && createdAt !== 'null') {
-                    taskEl.querySelector('.created-time').textContent = `Created: ${new Date(createdAt).toLocaleDateString()}`;
+                const createdEl = taskEl.querySelector('.created-time');
+                if (createdEl && createdAt && createdAt !== 'null') {
+                    createdEl.textContent = `Created: ${new Date(createdAt).toLocaleDateString()}`;
                 }
-                if (goalTime && goalTime !== 'null') {
+                
+                const remainingEl = taskEl.querySelector('.remaining-time');
+                if (remainingEl && goalTime && goalTime !== 'null') {
                     const { text, className } = formatTimeRemaining(goalTime);
-                    const remainingEl = taskEl.querySelector('.remaining-time');
                     remainingEl.textContent = text;
                     remainingEl.className = `remaining-time font-medium ${className}`;
                 }
@@ -435,14 +483,18 @@
             if (!draggedItem) return;
             this.classList.remove('drag-over');
             const newStatus = this.dataset.column;
-            this.appendChild(draggedItem);
             
             applyDropAnimation(draggedItem, newStatus);
 
             const userId = auth.currentUser?.uid;
             const taskId = draggedItem.dataset.id;
             if (!userId || !taskId) return;
-            await updateDoc(doc(db, `tasks/${userId}/userTasks`, taskId), { status: newStatus });
+            
+            const updateData = { status: newStatus };
+            if (newStatus === 'done') {
+                updateData.completedAt = serverTimestamp();
+            }
+            await updateDoc(doc(db, `tasks/${userId}/userTasks`, taskId), updateData);
             if (newStatus === 'done') triggerConfetti();
         }
 
@@ -494,13 +546,17 @@
             const dropZone = elementUnderTouch?.closest('.kanban-column');
             if (dropZone) {
                 const newStatus = dropZone.dataset.column;
-                dropZone.appendChild(draggedItem);
                 applyDropAnimation(draggedItem, newStatus);
 
                 const userId = auth.currentUser?.uid;
                 const taskId = draggedItem.dataset.id;
                 if (!userId || !taskId) return;
-                await updateDoc(doc(db, `tasks/${userId}/userTasks`, taskId), { status: newStatus });
+                
+                const updateData = { status: newStatus };
+                if (newStatus === 'done') {
+                    updateData.completedAt = serverTimestamp();
+                }
+                await updateDoc(doc(db, `tasks/${userId}/userTasks`, taskId), updateData);
                 if (newStatus === 'done') triggerConfetti();
             }
             draggedItem = null;
