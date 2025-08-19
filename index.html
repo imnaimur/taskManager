@@ -89,8 +89,7 @@
 
         <div class="container mx-auto p-4 md:p-8">
             <header class="text-center mb-8">
-                <h1 class="text-4xl font-bold text-gray-900">Task Board</h1>
-                <p class="text-gray-600 mt-2">My Personal Assistant😊</p>
+                <h1 class="text-4xl font-bold text-gray-900">My Task Board</h1>
                 <p class="text-gray-600 mt-2">Your tasks are saved to the cloud. Access them anywhere.</p>
             </header>
 
@@ -211,8 +210,16 @@
         const modalGoalTime = document.getElementById('modal-goal-time');
 
         // --- Firebase Initialization ---
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDpxTe-IykLwgoLBFNYOXLKOJVY8A9AqPQ",
+            authDomain: "task-manager-e3de8.firebaseapp.com",
+            projectId: "task-manager-e3de8",
+            storageBucket: "task-manager-e3de8.appspot.com",
+            messagingSenderId: "11010534997",
+            appId: "1:11010534997:web:592f5a9932ae45dbb16edc",
+            measurementId: "G-NZ9G8H2608"
+        };
 
         try {
             const app = initializeApp(firebaseConfig);
