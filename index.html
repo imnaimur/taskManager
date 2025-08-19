@@ -9,9 +9,10 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
         }
         .task {
-            touch-action: none;
+            touch-action: none; /* Disables default touch actions like scrolling */
         }
         .kanban-column {
             min-height: 200px;
@@ -23,6 +24,7 @@
         .drag-over {
             border-style: dashed;
             border-color: #4f46e5;
+            background-color: #eef2ff;
         }
         canvas {
             position: fixed;
@@ -43,7 +45,7 @@
         <header class="text-center mb-8">
             <div class="flex justify-center items-center mb-4">
                 <svg class="w-10 h-10 text-indigo-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                <a href="https://github.com/imnaimur" target="_blank" rel="noopener noreferrer" class="text-2xl font-bold text-gray-800 hover:text-indigo-600 transition-colors">Naimur's TM</a>
+                <a href="https://imnaimur.github.com" target="_blank" rel="noopener noreferrer" class="text-2xl font-bold text-gray-800 hover:text-indigo-600 transition-colors">Naimur's TM</a>
             </div>
             <h1 class="text-4xl font-bold text-gray-900">My Task Board</h1>
             <p class="text-gray-600 mt-2">Organize your projects with a simple drag-and-drop board.</p>
@@ -65,25 +67,19 @@
             <!-- To Do Column -->
             <div id="todo" class="bg-white rounded-xl shadow-lg p-4">
                 <h3 class="text-lg font-bold text-gray-700 mb-4 pb-2 border-b-2 border-red-500">To Do</h3>
-                <div class="kanban-column space-y-3" data-column="todo">
-                    <!-- Tasks will be added here -->
-                </div>
+                <div class="kanban-column space-y-3" data-column="todo"></div>
             </div>
 
             <!-- In Progress Column -->
             <div id="inprogress" class="bg-white rounded-xl shadow-lg p-4">
                 <h3 class="text-lg font-bold text-gray-700 mb-4 pb-2 border-b-2 border-yellow-500">In Progress</h3>
-                <div class="kanban-column space-y-3" data-column="inprogress">
-                    <!-- Tasks will be added here -->
-                </div>
+                <div class="kanban-column space-y-3" data-column="inprogress"></div>
             </div>
 
             <!-- Done Column -->
             <div id="done" class="bg-white rounded-xl shadow-lg p-4">
-                <h3 class="text-lg font-bold text-gray-700 mb-4 pb-2 border-b-2 border-green-500">Completed</h3>
-                <div class="kanban-column space-y-3" data-column="done">
-                    <!-- Tasks will be added here -->
-                </div>
+                <h3 class="text-lg font-bold text-gray-700 mb-4 pb-2 border-b-2 border-green-500">Done</h3>
+                <div class="kanban-column space-y-3" data-column="done"></div>
             </div>
         </div>
     </div>
@@ -93,18 +89,7 @@
             const taskInput = document.getElementById('task-input');
             const addTaskBtn = document.getElementById('add-task-btn');
             const columns = document.querySelectorAll('.kanban-column');
-
-            // Confetti setup
-            const canvas = document.getElementById('confetti-canvas');
-            const ctx = canvas.getContext('2d');
-            let confettiParticles = [];
-
-            function resizeCanvas() {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
+            let draggedItem = null;
 
             // --- Task Management ---
 
@@ -133,9 +118,12 @@
                 container.appendChild(deleteBtn);
                 taskEl.appendChild(container);
 
-                // Add drag event listeners to the new task element
+                // Add event listeners for both mouse and touch
                 taskEl.addEventListener('dragstart', handleDragStart);
                 taskEl.addEventListener('dragend', handleDragEnd);
+                taskEl.addEventListener('touchstart', handleTouchStart, { passive: false });
+                taskEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+                taskEl.addEventListener('touchend', handleTouchEnd);
 
                 return taskEl;
             };
@@ -143,13 +131,7 @@
             const addTask = () => {
                 const taskText = taskInput.value.trim();
                 if (taskText === '') return;
-
-                const newTask = {
-                    id: `task-${Date.now()}`,
-                    text: taskText,
-                    column: 'todo'
-                };
-
+                const newTask = { id: `task-${Date.now()}`, text: taskText, column: 'todo' };
                 const taskElement = createTaskElement(newTask);
                 document.querySelector('[data-column="todo"]').appendChild(taskElement);
                 taskInput.value = '';
@@ -163,21 +145,13 @@
             }
 
             addTaskBtn.addEventListener('click', addTask);
-            taskInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    addTask();
-                }
-            });
+            taskInput.addEventListener('keypress', (e) => e.key === 'Enter' && addTask());
 
-            // --- Drag and Drop ---
-
-            let draggedItem = null;
+            // --- Drag and Drop (Mouse Events) ---
 
             function handleDragStart(e) {
                 draggedItem = this;
-                setTimeout(() => {
-                    this.classList.add('dragging');
-                }, 0);
+                setTimeout(() => this.classList.add('dragging'), 0);
             }
 
             function handleDragEnd() {
@@ -186,47 +160,92 @@
             }
 
             columns.forEach(column => {
-                column.addEventListener('dragover', (e) => {
+                column.addEventListener('dragover', e => {
                     e.preventDefault();
                     column.classList.add('drag-over');
                 });
-
-                column.addEventListener('dragleave', () => {
-                    column.classList.remove('drag-over');
-                });
-
-                column.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    column.classList.remove('drag-over');
-                    if (!draggedItem) return;
-
-                    const targetColumnId = column.dataset.column;
-                    column.appendChild(draggedItem);
-                    
-                    // Trigger confetti if moved to 'Done'
-                    if (targetColumnId === 'done') {
-                        const prevColumnId = getTasks().find(t => t.id === draggedItem.dataset.id)?.column;
-                        if (prevColumnId !== 'done') {
-                             triggerConfetti();
-                        }
-                    }
-                    
-                    saveTasks();
-                });
+                column.addEventListener('dragleave', () => column.classList.remove('drag-over'));
+                column.addEventListener('drop', handleDrop);
             });
 
-            // --- Local Storage ---
+            function handleDrop(e) {
+                e.preventDefault();
+                if (!draggedItem) return;
+                
+                this.classList.remove('drag-over');
+                const targetColumn = this.closest('.kanban-column');
+                const targetColumnId = targetColumn.dataset.column;
+                
+                const prevColumnId = getTasks().find(t => t.id === draggedItem.dataset.id)?.column;
+                
+                targetColumn.appendChild(draggedItem);
+                
+                if (targetColumnId === 'done' && prevColumnId !== 'done') {
+                    triggerConfetti();
+                }
+                saveTasks();
+            }
+
+            // --- Touch Events for Mobile ---
+
+            function handleTouchStart(e) {
+                draggedItem = this;
+                this.classList.add('dragging');
+            }
+
+            function handleTouchMove(e) {
+                e.preventDefault(); // Prevents screen scrolling
+                if (!draggedItem) return;
+
+                const touch = e.touches[0];
+                const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+                
+                columns.forEach(col => col.classList.remove('drag-over'));
+
+                if (elementUnderTouch) {
+                    const dropZone = elementUnderTouch.closest('.kanban-column');
+                    if (dropZone) {
+                        dropZone.classList.add('drag-over');
+                    }
+                }
+            }
+
+            function handleTouchEnd(e) {
+                if (!draggedItem) return;
+                
+                draggedItem.classList.remove('dragging');
+                const touch = e.changedTouches[0];
+                const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+                
+                columns.forEach(col => col.classList.remove('drag-over'));
+
+                if (elementUnderTouch) {
+                    const dropZone = elementUnderTouch.closest('.kanban-column');
+                    if (dropZone) {
+                        const targetColumnId = dropZone.dataset.column;
+                        const prevColumnId = getTasks().find(t => t.id === draggedItem.dataset.id)?.column;
+
+                        dropZone.appendChild(draggedItem);
+
+                        if (targetColumnId === 'done' && prevColumnId !== 'done') {
+                            triggerConfetti();
+                        }
+                        saveTasks();
+                    }
+                }
+                draggedItem = null;
+            }
+
+
+            // --- Local Storage & Confetti (No changes needed here) ---
             
-            const getTasks = () => {
-                return JSON.parse(localStorage.getItem('kanbanTasks') || '[]');
-            };
+            const getTasks = () => JSON.parse(localStorage.getItem('kanbanTasks') || '[]');
 
             const saveTasks = () => {
                 const tasks = [];
                 columns.forEach(column => {
                     const columnId = column.dataset.column;
-                    const taskElements = column.querySelectorAll('.task');
-                    taskElements.forEach(taskEl => {
+                    column.querySelectorAll('.task').forEach(taskEl => {
                         tasks.push({
                             id: taskEl.dataset.id,
                             text: taskEl.querySelector('p').textContent,
@@ -238,30 +257,31 @@
             };
 
             const loadTasks = () => {
-                const tasks = getTasks();
-                tasks.forEach(task => {
+                getTasks().forEach(task => {
                     const taskElement = createTaskElement(task);
                     const column = document.querySelector(`[data-column="${task.column}"]`);
-                    if (column) {
-                        column.appendChild(taskElement);
-                    }
+                    if (column) column.appendChild(taskElement);
                 });
             };
-
-            // --- Confetti Animation ---
+            
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            let confettiParticles = [];
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
 
             function triggerConfetti() {
                 confettiParticles = [];
                 for (let i = 0; i < 150; i++) {
                     confettiParticles.push({
-                        x: Math.random() * canvas.width,
-                        y: -Math.random() * canvas.height * 0.5,
-                        size: Math.random() * 5 + 2,
-                        speed: Math.random() * 3 + 2,
-                        angle: Math.random() * Math.PI * 2,
-                        color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-                        rotation: Math.random() * 360,
-                        rotationSpeed: (Math.random() - 0.5) * 10
+                        x: Math.random() * canvas.width, y: -Math.random() * canvas.height * 0.5,
+                        size: Math.random() * 5 + 2, speed: Math.random() * 3 + 2,
+                        angle: Math.random() * Math.PI * 2, color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                        rotation: Math.random() * 360, rotationSpeed: (Math.random() - 0.5) * 10
                     });
                 }
                 animateConfetti();
@@ -270,24 +290,16 @@
             let animationFrameId;
             function animateConfetti() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
                 let activeParticles = false;
                 confettiParticles.forEach(p => {
-                    p.y += p.speed;
-                    p.x += Math.sin(p.angle) * 0.5;
-                    p.rotation += p.rotationSpeed;
-
+                    p.y += p.speed; p.x += Math.sin(p.angle) * 0.5; p.rotation += p.rotationSpeed;
                     if (p.y < canvas.height) {
                         activeParticles = true;
-                        ctx.save();
-                        ctx.translate(p.x, p.y);
-                        ctx.rotate(p.rotation * Math.PI / 180);
-                        ctx.fillStyle = p.color;
-                        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation * Math.PI / 180);
+                        ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
                         ctx.restore();
                     }
                 });
-
                 if (activeParticles) {
                     animationFrameId = requestAnimationFrame(animateConfetti);
                 } else {
@@ -295,7 +307,6 @@
                 }
             }
 
-            // Initial load
             loadTasks();
         });
     </script>
